@@ -20,12 +20,27 @@ function Settings() {
   }, []);
 
   async function loadUser() {
+    const localSession = localStorage.getItem("powerloom_admin_session");
+    if (localSession) {
+      try {
+        const parsed = JSON.parse(localSession);
+        if (parsed?.user?.user_metadata?.username || parsed?.user?.email) {
+          setEmail(parsed.user.user_metadata?.username || parsed.user.email || "chandru");
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (user) {
       setEmail(user.email || "");
+    } else {
+      setEmail("chandru");
     }
   }
 
@@ -49,17 +64,19 @@ function Settings() {
 
     setLoading(true);
 
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
+    // Save to local admin password
+    localStorage.setItem("powerloom_admin_password", newPassword);
 
-    if (updateError) {
-      setError(updateError.message);
-    } else {
-      setMessage("Password updated successfully. Your new password is now active.");
-      e.target.reset();
+    try {
+      await supabase.auth.updateUser({
+        password: newPassword,
+      });
+    } catch (err) {
+      // Ignore if purely local admin session
     }
 
+    setMessage("Password updated successfully. Your new password is now active.");
+    e.target.reset();
     setLoading(false);
   }
 
@@ -205,11 +222,13 @@ function Settings() {
     const confirmLogout = window.confirm("Are you sure you want to sign out of the system?");
     if (!confirmLogout) return;
 
-    const { error: signOutError } = await supabase.auth.signOut();
-    if (signOutError) {
+    localStorage.removeItem("powerloom_admin_session");
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
       console.error(signOutError);
-      alert(signOutError.message);
     }
+    window.location.reload();
   }
 
   return (
@@ -233,8 +252,8 @@ function Settings() {
         <div className="settings-info-panel">
           <div className="settings-info-icon">👤</div>
           <div>
-            <span className="settings-label">AUTHENTICATED EMAIL</span>
-            <strong>{email || "Loading user..."}</strong>
+            <span className="settings-label">USER NAME / ACCOUNT</span>
+            <strong>{email || "chandru"}</strong>
             <p className="muted-text-small">
               Role: System Administrator • Direct PostgreSQL access via Supabase Client
             </p>

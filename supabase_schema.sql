@@ -182,7 +182,7 @@ ALTER TABLE delivery_bobin_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE worker_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
--- Allow all authenticated users full access to tables
+-- Allow full access to all tables
 DO $$
 DECLARE
     t text;
@@ -198,7 +198,8 @@ BEGIN
           )
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS "Authenticated users full access" ON %I;', t);
-        EXECUTE format('CREATE POLICY "Authenticated users full access" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true);', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Full access policy" ON %I;', t);
+        EXECUTE format('CREATE POLICY "Full access policy" ON %I FOR ALL USING (true) WITH CHECK (true);', t);
     END LOOP;
 END $$;
 
@@ -212,18 +213,11 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies for design-images bucket
 DROP POLICY IF EXISTS "Public can view design images" ON storage.objects;
-CREATE POLICY "Public can view design images"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'design-images');
-
 DROP POLICY IF EXISTS "Authenticated users can upload design images" ON storage.objects;
-CREATE POLICY "Authenticated users can upload design images"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (bucket_id = 'design-images');
-
 DROP POLICY IF EXISTS "Authenticated users can update design images" ON storage.objects;
-CREATE POLICY "Authenticated users can update design images"
-ON storage.objects FOR UPDATE
-TO authenticated
-USING (bucket_id = 'design-images');
+DROP POLICY IF EXISTS "Allow public uploads for design images" ON storage.objects;
+
+CREATE POLICY "Allow public uploads for design images"
+ON storage.objects FOR ALL
+USING (bucket_id = 'design-images')
+WITH CHECK (bucket_id = 'design-images');

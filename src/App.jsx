@@ -342,38 +342,73 @@ function renderPage(page) {
    ========================================================= */
 
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
-
     setError("");
 
-    if (!email.trim() || !password) {
-      setError("Please enter your email and password.");
+    const inputUser = username.trim();
+    if (!inputUser || !password) {
+      setError("Please enter your user name and password.");
       return;
     }
 
     setLoading(true);
 
+    const activePassword =
+      localStorage.getItem("powerloom_admin_password") || "chandru@123";
+
+    // 1. Direct validation for requested credentials:
+    // User Name: "chandru", Password: "chandru@123"
+    if (
+      (inputUser.toLowerCase() === "chandru" ||
+        inputUser.toLowerCase() === "admin" ||
+        inputUser.toLowerCase() === "chandrukmc00@gmail.com") &&
+      password === activePassword
+    ) {
+      const adminSession = {
+        user: {
+          id: "chandru-admin-id",
+          email: "chandru",
+          user_metadata: {
+            username: "chandru",
+            name: "Chandru",
+          },
+        },
+        access_token: "authenticated_admin",
+      };
+
+      localStorage.setItem(
+        "powerloom_admin_session",
+        JSON.stringify(adminSession)
+      );
+      onLogin(adminSession);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Also try Supabase auth if an email is provided
+    const emailToTry = inputUser.includes("@")
+      ? inputUser
+      : `${inputUser}@powerloom.com`;
+
     const { data, error: loginError } =
       await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: emailToTry,
         password,
       });
 
     if (loginError) {
-      setError(loginError.message);
+      setError("Invalid user name or password. Please try again.");
       setLoading(false);
       return;
     }
 
     onLogin(data.session);
-
     setLoading(false);
   }
 
@@ -385,10 +420,7 @@ function LoginScreen({ onLogin }) {
 
       <div className="login-card">
         <div className="login-brand">
-          <div className="brand-mark large">
-            PL
-          </div>
-
+          <div className="brand-mark large">PL</div>
           <div>
             <strong>POWER LOOM</strong>
             <span>MANAGEMENT SYSTEM</span>
@@ -397,68 +429,44 @@ function LoginScreen({ onLogin }) {
 
         <div className="login-heading">
           <h1>Welcome back</h1>
-
-          <p>
-            Sign in to manage your power loom operations.
-          </p>
+          <p>Sign in to manage your power loom operations.</p>
         </div>
 
-        <form
-          className="login-form"
-          onSubmit={handleSubmit}
-        >
+        <form className="login-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="login-email">
-              Email
-            </label>
-
+            <label htmlFor="login-username">User Name</label>
             <input
-              id="login-email"
-              type="email"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              placeholder="Enter your email"
-              autoComplete="email"
+              id="login-username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your user name"
+              autoComplete="username"
+              required
             />
           </div>
 
           <div className="form-group">
-            <label htmlFor="login-password">
-              Password
-            </label>
-
+            <label htmlFor="login-password">Password</label>
             <input
               id="login-password"
               type="password"
               value={password}
-              onChange={(e) =>
-                setPassword(e.target.value)
-              }
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               autoComplete="current-password"
+              required
             />
           </div>
 
-          {error && (
-            <div className="settings-error">
-              {error}
-            </div>
-          )}
+          {error && <div className="settings-error">{error}</div>}
 
-          <button
-            type="submit"
-            className="login-submit"
-            disabled={loading}
-          >
+          <button type="submit" className="login-submit" disabled={loading}>
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
 
-        <div className="login-footer">
-          Power Loom Management System
-        </div>
+        <div className="login-footer">Power Loom Management System</div>
       </div>
     </div>
   );
@@ -491,6 +499,22 @@ function App() {
     let mounted = true;
 
     async function loadSession() {
+      // 1. Check local session first
+      const saved = localStorage.getItem("powerloom_admin_session");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (mounted && parsed) {
+            setSession(parsed);
+            setAuthLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("Saved session error:", e);
+        }
+      }
+
+      // 2. Check Supabase session
       const {
         data,
         error,
@@ -654,15 +678,12 @@ function App() {
 
     if (!confirmed) return;
 
-    const { error } =
-      await supabase.auth.signOut();
+    localStorage.removeItem("powerloom_admin_session");
 
-    if (error) {
-      console.error(
-        "Logout error:",
-        error
-      );
-      return;
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Signout error:", e);
     }
 
     setSession(null);
